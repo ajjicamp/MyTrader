@@ -7,6 +7,8 @@ from PyQt5 import QtCore
 from utility.setting import *
 from utility.static import *
 from multiprocessing import Process, Queue
+
+from trader.worker import Worker
 form_class = uic.loadUiType('C:/Users/USER/PycharmProjects/MyTrader/mywindow.ui')[0]
 
 
@@ -39,13 +41,14 @@ class Writer(QtCore.QThread):
 if __name__ == '__main__':
     # queue 설정
 
-    # os.system(f'python {SYSTEM_PATH}/login/versionupdater.py')
+    os.system(f'python {SYSTEM_PATH}/login/versionupdater.py')
     # 2번 계좌를 이용하여 실시간 틱데이터 수집하기
-    # os.system(f'python {SYSTEM_PATH}/login/autologin2.py')
+    os.system(f'python {SYSTEM_PATH}/login/autologin2.py')
     # 수집모듈
+    worker = Worker()
 
     # 1번 계좌를 이용하여 trading
-    os.system(f'python {SYSTEM_PATH}/login/autologin1.py')
+    # os.system(f'python {SYSTEM_PATH}/login/autologin1.py')
 
 
     app = QtWidgets.QApplication(sys.argv)
