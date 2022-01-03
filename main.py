@@ -2,12 +2,11 @@ import sqlite3
 import sys
 import os
 import logging
-from PyQt5 import QtWidgets, uic
-from PyQt5 import QtCore
+from PyQt5 import QtWidgets, QtCore, QtGui, uic
+from PyQt5.QtCore import Qt
 from utility.setting import *
 from utility.static import *
 from multiprocessing import Process, Queue
-
 from trader.worker import Worker
 form_class = uic.loadUiType('C:/Users/USER/PycharmProjects/MyTrader/mywindow.ui')[0]
 
@@ -15,6 +14,7 @@ form_class = uic.loadUiType('C:/Users/USER/PycharmProjects/MyTrader/mywindow.ui'
 class Window(QtWidgets.QMainWindow, form_class):
     def __init__(self):
         super().__init__()
+        # self.windowQ = windowQ
         self.log = logging.getLogger('Main')
         self.log.setLevel(logging.INFO)
         filehandler = logging.FileHandler(f"{SYSTEM_PATH}/log/S{strf_time('%Y%m%d')}.txt", encoding='utf-8')
@@ -59,15 +59,24 @@ class Window(QtWidgets.QMainWindow, form_class):
         # 필요한 변수설정
 
         # signalslot Writer 설정
-        self.writer = Writer()
-        self.writer.
+        self.writer = Writer(windowQ)
+        self.writer.data0_signal.connect(self.update_text_edit)
         print('self', self)
 
-    # 이벤트 슬롯 설정
+    def update_text_edit(self, msg):
+        # if msg[0] == '수신시간':
+
+        if msg[0] == 'LOG':
+            print('여기까지 옴')
+            now = datetime.datetime.now()
+            self.textEdit.append(f'{str(now)} : {msg[1]}')
+
+        else:
+            self.textEdit.append(msg[1])
 
 
 class Writer(QtCore.QThread):
-    data0_signal = QtCore.pyqtSignal
+    data0_signal = QtCore.pyqtSignal(list)
 
     def __init__(self, windowQ):
         super().__init__()
@@ -75,22 +84,25 @@ class Writer(QtCore.QThread):
 
     def run(self):
         while True:
-            if not self.windowQ.empty:
-                data = self.windowQ.get()
+            if not windowQ.empty:
+                data = windowQ.get()
                 if data[0] == 'LOG':
-                    self.data0_signal.emit(data[1])
+                    print("windowq_get", data)
+                    self.data0_signal.emit(data)
                 elif data[0] == 'GSJM':
-                    self.data1_signal.emit(data[1])
+                    self.data1_signal.emit(data)
 
 
 if __name__ == '__main__':
     # queue 설정
+    windowQ = Queue()
 
-    os.system(f'python {SYSTEM_PATH}/login/versionupdater.py')
+    # os.system(f'python {SYSTEM_PATH}/login/versionupdater.py')
     # 2번 계좌를 이용하여 실시간 틱데이터 수집하기
     os.system(f'python {SYSTEM_PATH}/login/autologin2.py')
     # 수집모듈
-    worker = Worker()
+    Process(target=Worker, args=(windowQ,), daemon=True).start()
+    # worker = Worker(windowQ)
 
     # 1번 계좌를 이용하여 trading
     # os.system(f'python {SYSTEM_PATH}/login/autologin1.py')

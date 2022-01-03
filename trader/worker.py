@@ -1,14 +1,17 @@
+import os
 import sys
 from PyQt5 import QtWidgets
 from PyQt5.QAxContainer import QAxWidget
 import pythoncom
 import pandas as pd
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
+from utility.setting import *
 
 class Worker:
     app = QtWidgets.QApplication(sys.argv)
 
-    def __init__(self):
-
+    def __init__(self, windowQ):
+        self.windowQ = windowQ
         self.dict_bool = {
             '실시간조건검색시작': False,
             '실시간조건검색중단': False,
@@ -74,6 +77,21 @@ class Worker:
             self.dict_cond[int(cond_index)] = cond_name
         print('조건검색식 리스트', self.dict_cond)
 
+        self.list_code = self.send_condition([sn_con, self.dict_cond[1], 1, 0])
+        # print('selflistcode', self.list_code)
+        # print('sn_reg', sn_reg)
+
+        k = 0
+        for i in range(0, len(self.list_code), 100):
+            rreg = [sn_reg + k, ';'.join(self.list_code[i:i + 100]), '10;12;14;30;228;41;61;71;81', 1]
+            # self.SetRealReg(rreg)
+            self.ocx.dynamicCall('SetRealReg(QString, QString, QString, QString)', rreg)
+
+            text = f"실시간 알림 등록 완료 - [{sn_reg + k}] 종목갯수 {len(rreg[1].split(';'))}"
+            print('text', text)
+            self.windowQ.put(['LOG', text])
+            k += 1
+
     def get_code_list_by_market(self, market):
         data = self.ocx.dynamicCall('GetCodeListByMarket(QString)', market)
         tokens = data.split(';')[:-1]
@@ -86,6 +104,12 @@ class Worker:
         if err_code == 0:
             self.dict_bool['로그인'] = True
 
+    def _receive_condition_ver(self, ret, msg):
+        if msg == '':
+            return
+        if ret == 1:   # 수신 성공
+            self.dict_bool['CD수신'] = True
+
     def _receive_tr_condition(self, screen, code_list, cond_name, cond_index, nnext):
         if screen == "" and cond_name == "" and cond_index == "" and nnext == "":
             return
@@ -93,14 +117,15 @@ class Worker:
         self.list_trcd = codes
         self.dict_bool['CR수신'] = True
 
-    def _receive_condition_ver(self, ret, msg):
-        if msg == '':
-            return
-        if ret == 1:   # 수신 성공
-            self.dict_bool['CD수신'] = True
-
     def _receive_real_condition(self):
         pass
+
+    def send_condition(self, cond):
+        self.dict_bool['CR수신'] = False
+        self.ocx.dynamicCall('SendCondition(QString, QString, int, int)', cond)
+        while not self.dict_bool['CR수신']:
+            pythoncom.PumpWaitingMessages()
+        return self.list_trcd
 
     def _receive_tr_data(self):
         pass
@@ -110,7 +135,3 @@ class Worker:
 
     def _receive_chejan_data(self):
         pass
-
-
-
-
