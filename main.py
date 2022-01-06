@@ -47,8 +47,8 @@ class Window(QtWidgets.QMainWindow, form_class):
             for index2 in range(11):
                 row, col = index2, index + 2
                 self.table_hoga2.setItem(row, col, QtWidgets.QTableWidgetItem())
-                self.table_hoga2.item(row,col).setTextAlignment(int(Qt.AlignRight) | int(Qt.AlignVCenter))
-                self.table_hoga2.item(row,col).setBackground(QtGui.QColor(0, 0, 100, (index2+1) * 7))
+                self.table_hoga2.item(row, col).setTextAlignment(int(Qt.AlignRight) | int(Qt.AlignVCenter))
+                self.table_hoga2.item(row, col).setBackground(QtGui.QColor(0, 0, 100, (index2+1) * 7))
 
             for index2 in range(11, 22):
                 row, col = index2, index + 2
@@ -58,16 +58,21 @@ class Window(QtWidgets.QMainWindow, form_class):
 
         # 필요한 변수설정
 
+        # 이벤트 설정
+        # self.table_gwansim.cellClicked.connect(self.gwansim_cellClicked)
+        # self.table_account.cellClicked.connect(self.account_cellClicked)
+        # self.gwansimNaccount.tabBarClicked.connect(self.gwansimNaccount_tabBarClicked)
+
         # signalslot Writer 설정
-        self.writer = Writer(windowQ)
+        self.writer = Writer()
         self.writer.data0_signal.connect(self.update_text_edit)
-        print('self', self)
+        # print('self', self)
 
     def update_text_edit(self, msg):
         # if msg[0] == '수신시간':
+        print('여기까지 옴')
 
         if msg[0] == 'LOG':
-            print('여기까지 옴')
             now = datetime.datetime.now()
             self.textEdit.append(f'{str(now)} : {msg[1]}')
 
@@ -77,20 +82,22 @@ class Window(QtWidgets.QMainWindow, form_class):
 
 class Writer(QtCore.QThread):
     data0_signal = QtCore.pyqtSignal(list)
+    print('data0')
 
-    def __init__(self, windowQ):
+    def __init__(self):
         super().__init__()
-        self.windowQ = windowQ
+        print('init실행')
+        # self.windowQ = windowQ
 
     def run(self):
+        # print('run됨')
         while True:
-            if not windowQ.empty:
-                data = windowQ.get()
-                if data[0] == 'LOG':
-                    print("windowq_get", data)
-                    self.data0_signal.emit(data)
-                elif data[0] == 'GSJM':
-                    self.data1_signal.emit(data)
+            data = windowQ.get()
+            print("windowq_get", data)
+            if data[0] == 'LOG':
+                self.data0_signal.emit(data)
+            elif data[0] == 'GSJM':
+                self.data1_signal.emit(data)
 
 
 if __name__ == '__main__':
@@ -99,7 +106,7 @@ if __name__ == '__main__':
 
     # os.system(f'python {SYSTEM_PATH}/login/versionupdater.py')
     # 2번 계좌를 이용하여 실시간 틱데이터 수집하기
-    os.system(f'python {SYSTEM_PATH}/login/autologin2.py')
+    # os.system(f'python {SYSTEM_PATH}/login/autologin2.py')
     # 수집모듈
     Process(target=Worker, args=(windowQ,), daemon=True).start()
     # worker = Worker(windowQ)

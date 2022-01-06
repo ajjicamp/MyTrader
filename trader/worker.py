@@ -88,7 +88,7 @@ class Worker:
             self.ocx.dynamicCall('SetRealReg(QString, QString, QString, QString)', rreg)
 
             text = f"실시간 알림 등록 완료 - [{sn_reg + k}] 종목갯수 {len(rreg[1].split(';'))}"
-            print('text', text)
+            # print('text', text)
             self.windowQ.put(['LOG', text])
             k += 1
 
