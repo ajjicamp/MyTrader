@@ -8,6 +8,7 @@ from utility.setting import *
 from utility.static import *
 from multiprocessing import Process, Queue
 from trader.worker import Worker
+# from trader.writer import Writer
 form_class = uic.loadUiType('C:/Users/USER/PycharmProjects/MyTrader/mywindow.ui')[0]
 
 
@@ -65,11 +66,12 @@ class Window(QtWidgets.QMainWindow, form_class):
 
         # signalslot Writer 설정
         self.writer = Writer()
-        self.writer.data0_signal.connect(self.update_text_edit)
-        # print('self', self)
+        self.writer.LOG_signal.connect(self.update_text_edit)
+        self.writer.GSJM_signal.connect(self.update_gwansimjongmok)
+
+        self.writer.start()
 
     def update_text_edit(self, msg):
-        # if msg[0] == '수신시간':
         print('여기까지 옴')
 
         if msg[0] == 'LOG':
@@ -79,10 +81,42 @@ class Window(QtWidgets.QMainWindow, form_class):
         else:
             self.textEdit.append(msg[1])
 
+    def update_gwansimjongmok(self, data):  # data = ('initial', "", "")
+
+        if data[0] == 'initial':
+            # 1차로 수동으로 지정하기 전에 관심종목중 첫째 항목을 지정종목으로 감시 시작
+            # print('선택된주식코드', N_.code)
+
+            rows = len(D_GSJM_name)
+            self.table_gwansim.setRowCount(rows)
+
+            # 관심종목명만 우선 table에 기재(0번 칼럼)
+            for row, (code, name) in enumerate(D_GSJM_name.items()):
+                # todo 아래 코드도 일관되게 고쳐야 한다.
+                item = QtWidgets.QTableWidgetItem(name)
+                self.table_gwansim.setItem(row, 0, item)
+                # 관심종목의 코드별로 해당 row값을 저장
+                self.code_index[code] = row
+
+        elif data[0] == 'real':     # data = ('real', code, name, c, db, per, cv, cva, ch)
+            code = data[1]
+            code_info = data[2:] # (name, c, db, per, cv, cva, ch)
+
+            row = self.code_index[code]  # code_index dict에서 row값 검색 {code:row, code:row ...}
+            for col in range(7):  # table_gwansim columns 수
+                self.table_gwansim.setItem(row, col, QtWidgets.QTableWidgetItem())
+                item = code_info[col]
+                if type(item) == int or type(item) == float:
+                    item = format(item, ',')
+                    self.table_gwansim.item(row, col).setTextAlignment(int(Qt.AlignRight) | int(Qt.AlignVCenter))
+                self.table_gwansim.item(row, col).setData(Qt.DisplayRole, item)
+
+
 
 class Writer(QtCore.QThread):
-    data0_signal = QtCore.pyqtSignal(list)
-    print('data0')
+    LOG_signal = QtCore.pyqtSignal(list)
+    GSJM_signal = QtCore.pyqtSignal(list)
+    print("writer")
 
     def __init__(self):
         super().__init__()
@@ -90,14 +124,14 @@ class Writer(QtCore.QThread):
         # self.windowQ = windowQ
 
     def run(self):
-        # print('run됨')
+        print('run됨')
         while True:
             data = windowQ.get()
             print("windowq_get", data)
             if data[0] == 'LOG':
-                self.data0_signal.emit(data)
+                self.LOG_signal.emit(data)
             elif data[0] == 'GSJM':
-                self.data1_signal.emit(data)
+                self.GSJM_signal.emit(data)
 
 
 if __name__ == '__main__':

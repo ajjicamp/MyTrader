@@ -78,17 +78,18 @@ class Worker:
         print('조건검색식 리스트', self.dict_cond)
 
         self.list_code = self.send_condition([sn_con, self.dict_cond[1], 1, 0])
+
         # print('selflistcode', self.list_code)
         # print('sn_reg', sn_reg)
 
         k = 0
         for i in range(0, len(self.list_code), 100):
             rreg = [sn_reg + k, ';'.join(self.list_code[i:i + 100]), '10;12;14;30;228;41;61;71;81', 1]
-            # self.SetRealReg(rreg)
+            # 실시간 등록 (rreg)
             self.ocx.dynamicCall('SetRealReg(QString, QString, QString, QString)', rreg)
 
             text = f"실시간 알림 등록 완료 - [{sn_reg + k}] 종목갯수 {len(rreg[1].split(';'))}"
-            # print('text', text)
+            print('text', text)
             self.windowQ.put(['LOG', text])
             k += 1
 
