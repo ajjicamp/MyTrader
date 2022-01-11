@@ -6,6 +6,7 @@ import pythoncom
 import pandas as pd
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from utility.setting import *
+from utility.static import *
 
 class Worker:
     app = QtWidgets.QApplication(sys.argv)
@@ -30,6 +31,11 @@ class Worker:
 
         self.list_trcd = []
         self.list_kosd = []
+
+        self.str_tday = strf_time('%Y%m%d')
+        self.str_open_time = self.str_tday + '090000'
+        self.dt_mtct = None
+
 
         self.ocx = QAxWidget('KHOPENAPI.KHOpenAPICtrl.1')
 
@@ -131,8 +137,104 @@ class Worker:
     def _receive_tr_data(self):
         pass
 
-    def _receive_real_data(self):
+    def _receive_real_data(self,  code, realtype, realdata):
+        if realdata == '':
+            return
+        if realtype == '장시작시간':
+            try:
+                self.operation = int(self.get_comm_real_data(code, 215))
+                current = self.get_comm_real_data(code, 20)
+                remain = self.get_comm_real_data(code, 214)
+            except Exception as e:
+                self.windowQ.put([1, f'OnReceiveRealData 장시작시간 {e}'])
+            else:
+                self.windowQ.put([1, f'장운영 시간 수신 알림 - {self.operation} {current[:2]}:{current[2:4]}:{current[4:]}'
+                                     f' 남은시간 {remain[:2]}:{remain[2:4]}:{remain[4:]}'])
+        elif realtype == '주식체결':
+            try:
+                c = abs(int(self.get_comm_real_data(code, 10)))
+                o = abs(int(self.get_comm_real_data(code, 16)))
+                v = int(self.get_comm_real_data(code, 15))
+                dt = self.str_tday + self.get_comm_real_data(code, 20)
+            except Exception as e:
+                self.windowQ.put([1, f'OnReceiveRealData 주식체결 {e}'])
+            else:
+                if self.operation == 1:
+                    self.operation = 3
+                if dt != self.str_open_time and int(dt) > int(self.str_open_time):
+                    self.str_jcct = dt
+                # if code not in self.dict_vipr.keys():
+                #     self.InsertViPrice(code, o)
+                # if code in self.dict_vipr.keys() and not self.dict_vipr[code][0] and now() > self.dict_vipr[code][1]:
+                #     self.UpdateViPrice(code, c)
+                try:
+                    pret = self.dict_tick[code][0]
+                    bid_volumns = self.dict_tick[code][1]
+                    ask_volumns = self.dict_tick[code][2]
+                except KeyError:
+                    pret = None
+                    bid_volumns = 0
+                    ask_volumns = 0
+                if v > 0:
+                    self.dict_tick[code] = [dt, bid_volumns + abs(v), ask_volumns]
+                else:
+                    self.dict_tick[code] = [dt, bid_volumns, ask_volumns + abs(v)]
+                if dt != pret:
+                    bids = self.dict_tick[code][1]
+                    asks = self.dict_tick[code][2]
+                    self.dict_tick[code] = [dt, 0, 0]
+                    try:
+                        h = abs(int(self.get_comm_real_data(code, 17)))
+                        low = abs(int(self.get_comm_real_data(code, 18)))
+                        per = float(self.get_comm_real_data(code, 12))
+                        dm = int(self.get_comm_real_data(code, 14))
+                        ch = float(self.get_comm_real_data(code, 228))
+                        name = self.GetMasterCodeName(code)
+                    except Exception as e:
+                        self.windowQ.put([1, f'OnReceiveRealData 주식체결 {e}'])
+                    else:
+                        if code in self.dict_hoga.keys():
+                            self.UpdateTickData(code, name, c, o, h, low, per, dm, ch, bids, asks, dt, now())
+
+        elif realtype == '주식호가잔량':
+            try:
+                tsjr = int(self.get_comm_real_data(code, 121))
+                tbjr = int(self.get_comm_real_data(code, 125))
+                s5hg = abs(int(self.get_comm_real_data(code, 45)))
+                s4hg = abs(int(self.get_comm_real_data(code, 44)))
+                s3hg = abs(int(self.get_comm_real_data(code, 43)))
+                s2hg = abs(int(self.get_comm_real_data(code, 42)))
+                s1hg = abs(int(self.get_comm_real_data(code, 41)))
+                b1hg = abs(int(self.get_comm_real_data(code, 51)))
+                b2hg = abs(int(self.get_comm_real_data(code, 52)))
+                b3hg = abs(int(self.get_comm_real_data(code, 53)))
+                b4hg = abs(int(self.get_comm_real_data(code, 54)))
+                b5hg = abs(int(self.get_comm_real_data(code, 55)))
+                s5jr = int(self.get_comm_real_data(code, 65))
+                s4jr = int(self.get_comm_real_data(code, 64))
+                s3jr = int(self.get_comm_real_data(code, 63))
+                s2jr = int(self.get_comm_real_data(code, 62))
+                s1jr = int(self.get_comm_real_data(code, 61))
+                b1jr = int(self.get_comm_real_data(code, 71))
+                b2jr = int(self.get_comm_real_data(code, 72))
+                b3jr = int(self.get_comm_real_data(code, 73))
+                b4jr = int(self.get_comm_real_data(code, 74))
+                b5jr = int(self.get_comm_real_data(code, 75))
+            except Exception as e:
+                self.windowQ.put([1, f'OnReceiveRealData 주식호가잔량 {e}'])
+            else:
+                self.dict_hoga[code] = [tsjr, tbjr,
+                                        s5hg, s4hg, s3hg, s2hg, s1hg, b1hg, b2hg, b3hg, b4hg, b5hg,
+                                        s5jr, s4jr, s3jr, s2jr, s1jr, b1jr, b2jr, b3jr, b4jr, b5jr]
+
         pass
 
     def _receive_chejan_data(self):
         pass
+
+    #-------------------------------------------------------------------------------------------------------------------
+    # OpenAPI+ 메서드
+    #-------------------------------------------------------------------------------------------------------------------
+
+    def get_comm_real_data(self, code, fid):
+        return self.ocx.dynamicCall('GetCommRealData(QString, int)', code, fid)
