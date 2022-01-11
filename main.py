@@ -72,14 +72,13 @@ class Window(QtWidgets.QMainWindow, form_class):
         self.writer.start()
 
     def update_text_edit(self, msg):
-        print('여기까지 옴')
 
         if msg[0] == 'LOG':
             now = datetime.datetime.now()
             self.textEdit.append(f'{str(now)} : {msg[1]}')
 
-        else:
-            self.textEdit.append(msg[1])
+        # else:
+        #     self.textEdit.append(msg[1])
 
     def update_gwansimjongmok(self, data):  # data = ('initial', "", "")
 
@@ -112,23 +111,19 @@ class Window(QtWidgets.QMainWindow, form_class):
                 self.table_gwansim.item(row, col).setData(Qt.DisplayRole, item)
 
 
-
 class Writer(QtCore.QThread):
     LOG_signal = QtCore.pyqtSignal(list)
     GSJM_signal = QtCore.pyqtSignal(list)
-    print("writer")
 
     def __init__(self):
         super().__init__()
-        print('init실행')
         # self.windowQ = windowQ
 
     def run(self):
-        print('run됨')
         while True:
             data = windowQ.get()
-            print("windowq_get", data)
             if data[0] == 'LOG':
+                # print('data: ', data)
                 self.LOG_signal.emit(data)
             elif data[0] == 'GSJM':
                 self.GSJM_signal.emit(data)
@@ -137,12 +132,13 @@ class Writer(QtCore.QThread):
 if __name__ == '__main__':
     # queue 설정
     windowQ = Queue()
+    workerQ = Queue()
 
     # os.system(f'python {SYSTEM_PATH}/login/versionupdater.py')
     # 2번 계좌를 이용하여 실시간 틱데이터 수집하기
-    # os.system(f'python {SYSTEM_PATH}/login/autologin2.py')
+    os.system(f'python {SYSTEM_PATH}/login/autologin2.py')
     # 수집모듈
-    Process(target=Worker, args=(windowQ,), daemon=True).start()
+    Process(target=Worker, args=(windowQ, workerQ), daemon=True).start()
     # worker = Worker(windowQ)
 
     # 1번 계좌를 이용하여 trading

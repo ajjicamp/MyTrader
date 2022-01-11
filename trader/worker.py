@@ -1,18 +1,24 @@
+import datetime
 import os
 import sys
 from PyQt5 import QtWidgets
 from PyQt5.QAxContainer import QAxWidget
 import pythoncom
 import pandas as pd
+import logging
+import time
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from utility.setting import *
 from utility.static import *
 
-class Worker:
-    app = QtWidgets.QApplication(sys.argv)
+app = QtWidgets.QApplication(sys.argv)
 
-    def __init__(self, windowQ):
+
+class Worker:
+
+    def __init__(self, windowQ, workerQ):
         self.windowQ = windowQ
+        self.workerQ = workerQ
         self.dict_bool = {
             '실시간조건검색시작': False,
             '실시간조건검색중단': False,
@@ -28,6 +34,9 @@ class Worker:
         self.dict_code = {}     # 종목코드(코스피+코스닥)
         self.dict_name = {}     # 종목이름(코스피+코드닥)
         self.dict_cond = {}     # 조건검색식 리스트(번호:이름)
+        self.dict_tick = {}
+        self.dict_hoga = {}
+        self.operation = 1
 
         self.list_trcd = []
         self.list_kosd = []
@@ -50,6 +59,8 @@ class Worker:
 
     def start(self):
         self.comm_connect()
+        self.event_loop()
+        # app.exec_()
 
     def comm_connect(self):
         self.ocx.dynamicCall('CommConnect()')
@@ -83,21 +94,46 @@ class Worker:
             self.dict_cond[int(cond_index)] = cond_name
         print('조건검색식 리스트', self.dict_cond)
 
-        self.list_code = self.send_condition([sn_con, self.dict_cond[1], 1, 0])
+        self.list_code = self.send_condition([sn_con, self.dict_cond[1], 1, '0'])
 
         # print('selflistcode', self.list_code)
         # print('sn_reg', sn_reg)
+
+        # ret = self.set_real_reg('3030', '005930', '20;41', 1)
+        # print('ret', ret)
+        print('총 종목수: ', len(self.list_code))
 
         k = 0
         for i in range(0, len(self.list_code), 100):
             rreg = [sn_reg + k, ';'.join(self.list_code[i:i + 100]), '10;12;14;30;228;41;61;71;81', 1]
             # 실시간 등록 (rreg)
-            self.ocx.dynamicCall('SetRealReg(QString, QString, QString, QString)', rreg)
-
-            text = f"실시간 알림 등록 완료 - [{sn_reg + k}] 종목갯수 {len(rreg[1].split(';'))}"
-            print('text', text)
-            self.windowQ.put(['LOG', text])
+            ret = self.set_real_reg(rreg)
+            if ret == 0:
+                text = f"실시간 알림 등록 완료 - [{sn_reg + k}] 종목갯수 {len(rreg[1].split(';'))}"
+                print('text', text)
+                self.windowQ.put(['LOG', text])
+            if i == 2400:
+                break
             k += 1
+        print('등록완료%%%%%%%%%%%%%')
+
+    def event_loop(self):
+
+        while True:
+            pythoncom.PumpWaitingMessages()
+            if not self.workerQ.empty():
+                data = self.workerQ.get()
+                print('workerQ_data 수신')
+                if data == 'GetAccountJango':
+                    self.GetAccountJango()
+                elif data == 'GetAccountEvaluation':
+                    self.GetAccountEvaluation()
+
+            time_loop = now() + datetime.timedelta(seconds=0.25)
+            # print(now(), time_loop)
+            while now() < time_loop:
+                pythoncom.PumpWaitingMessages()
+                time.sleep(0.0001)
 
     def get_code_list_by_market(self, market):
         data = self.ocx.dynamicCall('GetCodeListByMarket(QString)', market)
@@ -138,26 +174,34 @@ class Worker:
         pass
 
     def _receive_real_data(self,  code, realtype, realdata):
+        logging.info(f"OnReceiveRealData {code} {realtype} {realdata}")
+
+        # print('receive_time', datetime.datetime.now())
         if realdata == '':
             return
+
+        print('realdata', code, realdata)
+
         if realtype == '장시작시간':
             try:
                 self.operation = int(self.get_comm_real_data(code, 215))
                 current = self.get_comm_real_data(code, 20)
                 remain = self.get_comm_real_data(code, 214)
             except Exception as e:
-                self.windowQ.put([1, f'OnReceiveRealData 장시작시간 {e}'])
+                self.windowQ.put(['LOG', f'OnReceiveRealData 장시작시간 {e}'])
             else:
-                self.windowQ.put([1, f'장운영 시간 수신 알림 - {self.operation} {current[:2]}:{current[2:4]}:{current[4:]}'
+                self.windowQ.put(['LOG', f'장운영 시간 수신 알림 - {self.operation} {current[:2]}:{current[2:4]}:{current[4:]}'
                                      f' 남은시간 {remain[:2]}:{remain[2:4]}:{remain[4:]}'])
         elif realtype == '주식체결':
+            print('주식체결실시간', code, realdata)
+
             try:
                 c = abs(int(self.get_comm_real_data(code, 10)))
                 o = abs(int(self.get_comm_real_data(code, 16)))
                 v = int(self.get_comm_real_data(code, 15))
                 dt = self.str_tday + self.get_comm_real_data(code, 20)
             except Exception as e:
-                self.windowQ.put([1, f'OnReceiveRealData 주식체결 {e}'])
+                self.windowQ.put(['LOG', f'OnReceiveRealData 주식체결 {e}'])
             else:
                 if self.operation == 1:
                     self.operation = 3
@@ -189,13 +233,13 @@ class Worker:
                         per = float(self.get_comm_real_data(code, 12))
                         dm = int(self.get_comm_real_data(code, 14))
                         ch = float(self.get_comm_real_data(code, 228))
-                        name = self.GetMasterCodeName(code)
+                        name = self.get_master_code_name(code)
                     except Exception as e:
-                        self.windowQ.put([1, f'OnReceiveRealData 주식체결 {e}'])
+                        self.windowQ.put(['LOG', f'OnReceiveRealData 주식체결 {e}'])
                     else:
                         if code in self.dict_hoga.keys():
-                            self.UpdateTickData(code, name, c, o, h, low, per, dm, ch, bids, asks, dt, now())
-
+                            self.update_tick_data(code, name, c, o, h, low, per, dm, ch, bids, asks, dt, now())
+            
         elif realtype == '주식호가잔량':
             try:
                 tsjr = int(self.get_comm_real_data(code, 121))
@@ -221,16 +265,18 @@ class Worker:
                 b4jr = int(self.get_comm_real_data(code, 74))
                 b5jr = int(self.get_comm_real_data(code, 75))
             except Exception as e:
-                self.windowQ.put([1, f'OnReceiveRealData 주식호가잔량 {e}'])
+                self.windowQ.put(['LOG', f'OnReceiveRealData 주식호가잔량 {e}'])
             else:
                 self.dict_hoga[code] = [tsjr, tbjr,
                                         s5hg, s4hg, s3hg, s2hg, s1hg, b1hg, b2hg, b3hg, b4hg, b5hg,
                                         s5jr, s4jr, s3jr, s2jr, s1jr, b1jr, b2jr, b3jr, b4jr, b5jr]
 
-        pass
-
     def _receive_chejan_data(self):
         pass
+
+    def update_tick_data(self, code, name, c, o, h, low, per, dm, ch, bids, asks, dt, now):
+        print('udata_tick_data', code, name, c, o, h, low, per, dm, ch, bids, asks, dt, now)
+
 
     #-------------------------------------------------------------------------------------------------------------------
     # OpenAPI+ 메서드
@@ -238,3 +284,9 @@ class Worker:
 
     def get_comm_real_data(self, code, fid):
         return self.ocx.dynamicCall('GetCommRealData(QString, int)', code, fid)
+
+    # def set_real_reg(self, screen, code_list, fid_list, real_type):
+    def set_real_reg(self, rreg):
+        ret = self.ocx.dynamicCall("SetRealReg(QString, QString, QString, QString)", rreg)
+        return ret
+
