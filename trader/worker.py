@@ -96,12 +96,9 @@ class Worker:
 
         self.list_code = self.send_condition([sn_con, self.dict_cond[1], 1, 0])
 
-        print('selflistcode', self.list_code)
-        # input()
-        # print('sn_reg', sn_reg)
+        # print('selflistcode', self.list_code)
 
         # ret = self.set_real_reg('3030', '005930', '20;41', 1)
-        # print('ret', ret)
         print('총 종목수: ', len(self.list_code))
 
         k = 0
@@ -109,19 +106,15 @@ class Worker:
             # rreg = [sn_reg + k, ';'.join(self.list_code[i:i + 100]), '10;12;14;30;228;41;61;71;81', 1]
             rreg = [sn_reg + k, ';'.join(self.list_code[i:i + 100]), '20;41', 1]
             # 실시간 등록 (rreg)
-            print('codelist', i, self.list_code[i:i + 100])
             ret = self.set_real_reg(rreg)
             if ret == 0:
                 text = f"실시간 알림 등록 완료 - [{sn_reg + k}] 종목갯수 {len(rreg[1].split(';'))}"
-                print('text', text)
                 self.windowQ.put(['LOG', text])
-            # if i == 2000:   # 24화면 이상은 등록이 안된다. roof가 멈춘다.
-            #     break
             k += 1
         print('등록완료%%%%%%%%%%%%%')
 
     def event_loop(self):
-
+        self.OperationRealreg()
         while True:
             pythoncom.PumpWaitingMessages()
             if not self.workerQ.empty():
@@ -137,6 +130,34 @@ class Worker:
             while now() < time_loop:
                 pythoncom.PumpWaitingMessages()
                 time.sleep(0.0001)
+
+    def OperationRealreg(self):
+        self.windowQ.put([2, '장운영시간 알림 등록'])
+        self.set_real_reg([sn_oper, ' ', '215;20;214', 0])
+        self.windowQ.put(['LOG', '시스템 명령 실행 알림 - 장운영시간 등록 완료'])
+
+        self.windowQ.put([2, 'VI발동해제 등록'])
+        self.block_request('opt10054', 시장구분='000', 장전구분='1', 종목코드='', 발동구분='1', 제외종목='111111011',
+                           거래량구분='0', 거래대금구분='0', 발동방향='0', output='발동종목', next=0)
+        self.windowQ.put(['LOG', '시스템 명령 실행 알림 - 리시버 VI발동해제 등록 완료'])
+
+        self.list_code = self.send_condition([sn_oper, self.dict_cond[1], 1, 0])
+        self.list_code1 = [code for i, code in enumerate(self.list_code) if i % 4 == 0]
+        self.list_code2 = [code for i, code in enumerate(self.list_code) if i % 4 == 1]
+        self.list_code3 = [code for i, code in enumerate(self.list_code) if i % 4 == 2]
+        self.list_code4 = [code for i, code in enumerate(self.list_code) if i % 4 == 3]
+        k = 0
+        for i in range(0, len(self.list_code), 100):
+            rreg = [sn_jchj + k, ';'.join(self.list_code[i:i + 100]), '10;12;14;30;228;41;61;71;81', 1]
+            self.SetRealReg(rreg)
+            text = f"실시간 알림 등록 완료 - [{sn_jchj + k}] 종목갯수 {len(rreg[1].split(';'))}"
+            self.windowQ.put([1, text])
+            k += 1
+        self.windowQ.put(['LOG', '시스템 명령 실행 알림 - 리시버 장운영시간 및 실시간주식체결 등록 완료'])
+        self.windowQ.put(['LOG', '시스템 명령 실행 알림 - 리시버 시작 완료'])
+
+
+
 
     def get_code_list_by_market(self, market):
         data = self.ocx.dynamicCall('GetCodeListByMarket(QString)', market)
@@ -183,7 +204,7 @@ class Worker:
         if realdata == '':
             return
 
-        print('realdata', code, realdata)
+        # print('realdata', code, realdata)
 
         if realtype == '장시작시간':
             try:
@@ -196,8 +217,6 @@ class Worker:
                 self.windowQ.put(['LOG', f'장운영 시간 수신 알림 - {self.operation} {current[:2]}:{current[2:4]}:{current[4:]}'
                                      f' 남은시간 {remain[:2]}:{remain[2:4]}:{remain[4:]}'])
         elif realtype == '주식체결':
-            print('주식체결실시간', code, realdata)
-
             try:
                 c = abs(int(self.get_comm_real_data(code, 10)))
                 o = abs(int(self.get_comm_real_data(code, 16)))
@@ -278,8 +297,8 @@ class Worker:
         pass
 
     def update_tick_data(self, code, name, c, o, h, low, per, dm, ch, bids, asks, dt, now):
-        print('udata_tick_data', code, name, c, o, h, low, per, dm, ch, bids, asks, dt, now)
-
+        # print('udata_tick_data', code, name, c, o, h, low, per, dm, ch, bids, asks, dt, now)
+        pass
 
     #-------------------------------------------------------------------------------------------------------------------
     # OpenAPI+ 메서드
