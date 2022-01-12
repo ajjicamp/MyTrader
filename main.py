@@ -68,7 +68,6 @@ class Window(QtWidgets.QMainWindow, form_class):
         self.writer = Writer()
         self.writer.LOG_signal.connect(self.update_text_edit)
         self.writer.GSJM_signal.connect(self.update_gwansimjongmok)
-
         self.writer.start()
 
     def update_text_edit(self, msg):

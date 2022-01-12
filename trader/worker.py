@@ -94,9 +94,10 @@ class Worker:
             self.dict_cond[int(cond_index)] = cond_name
         print('조건검색식 리스트', self.dict_cond)
 
-        self.list_code = self.send_condition([sn_con, self.dict_cond[1], 1, '0'])
+        self.list_code = self.send_condition([sn_con, self.dict_cond[1], 1, 0])
 
-        # print('selflistcode', self.list_code)
+        print('selflistcode', self.list_code)
+        # input()
         # print('sn_reg', sn_reg)
 
         # ret = self.set_real_reg('3030', '005930', '20;41', 1)
@@ -105,15 +106,17 @@ class Worker:
 
         k = 0
         for i in range(0, len(self.list_code), 100):
-            rreg = [sn_reg + k, ';'.join(self.list_code[i:i + 100]), '10;12;14;30;228;41;61;71;81', 1]
+            # rreg = [sn_reg + k, ';'.join(self.list_code[i:i + 100]), '10;12;14;30;228;41;61;71;81', 1]
+            rreg = [sn_reg + k, ';'.join(self.list_code[i:i + 100]), '20;41', 1]
             # 실시간 등록 (rreg)
+            print('codelist', i, self.list_code[i:i + 100])
             ret = self.set_real_reg(rreg)
             if ret == 0:
                 text = f"실시간 알림 등록 완료 - [{sn_reg + k}] 종목갯수 {len(rreg[1].split(';'))}"
                 print('text', text)
                 self.windowQ.put(['LOG', text])
-            if i == 2400:
-                break
+            # if i == 2000:   # 24화면 이상은 등록이 안된다. roof가 멈춘다.
+            #     break
             k += 1
         print('등록완료%%%%%%%%%%%%%')
 
