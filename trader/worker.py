@@ -7,6 +7,7 @@ import pythoncom
 import pandas as pd
 import logging
 import time
+
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 from utility.setting import *
 from utility.static import *
@@ -30,6 +31,9 @@ class Worker:
             'CD수신': False,
             'CR수신': False
         }
+
+        self.dict_cum_vol = {}  # key; code, value; DataFrame['10초누적거래대금', '10초전당일거래대금']
+        self.dict_vipr = {}  # vi발동관련
 
         self.dict_code = {}     # 종목코드(코스피+코스닥)
         self.dict_name = {}     # 종목이름(코스피+코드닥)
@@ -94,27 +98,8 @@ class Worker:
             self.dict_cond[int(cond_index)] = cond_name
         print('조건검색식 리스트', self.dict_cond)
 
-        self.list_code = self.send_condition([sn_con, self.dict_cond[1], 1, 0])
-
-        # print('selflistcode', self.list_code)
-
-        # ret = self.set_real_reg('3030', '005930', '20;41', 1)
-        print('총 종목수: ', len(self.list_code))
-
-        k = 0
-        for i in range(0, len(self.list_code), 100):
-            # rreg = [sn_reg + k, ';'.join(self.list_code[i:i + 100]), '10;12;14;30;228;41;61;71;81', 1]
-            rreg = [sn_reg + k, ';'.join(self.list_code[i:i + 100]), '20;41', 1]
-            # 실시간 등록 (rreg)
-            ret = self.set_real_reg(rreg)
-            if ret == 0:
-                text = f"실시간 알림 등록 완료 - [{sn_reg + k}] 종목갯수 {len(rreg[1].split(';'))}"
-                self.windowQ.put(['LOG', text])
-            k += 1
-        print('등록완료%%%%%%%%%%%%%')
-
     def event_loop(self):
-        self.OperationRealreg()
+        self.operation_real_reg()
         while True:
             pythoncom.PumpWaitingMessages()
             if not self.workerQ.empty():
@@ -131,33 +116,32 @@ class Worker:
                 pythoncom.PumpWaitingMessages()
                 time.sleep(0.0001)
 
-    def OperationRealreg(self):
-        self.windowQ.put([2, '장운영시간 알림 등록'])
-        self.set_real_reg([sn_oper, ' ', '215;20;214', 0])
+    def operation_real_reg(self):
+        self.windowQ.put(['LOG', '장운영시간 알림 등록'])
+        self.set_real_reg([scrNo['장운영시간'], ' ', '215;20;214', 0])
         self.windowQ.put(['LOG', '시스템 명령 실행 알림 - 장운영시간 등록 완료'])
 
-        self.windowQ.put([2, 'VI발동해제 등록'])
+        '''
+        self.windowQ.put(['LOG', 'VI발동해제 등록'])
         self.block_request('opt10054', 시장구분='000', 장전구분='1', 종목코드='', 발동구분='1', 제외종목='111111011',
                            거래량구분='0', 거래대금구분='0', 발동방향='0', output='발동종목', next=0)
         self.windowQ.put(['LOG', '시스템 명령 실행 알림 - 리시버 VI발동해제 등록 완료'])
+        '''
 
-        self.list_code = self.send_condition([sn_oper, self.dict_cond[1], 1, 0])
+        self.list_code = self.send_condition([scrNo['장운영시간'], self.dict_cond[1], 1, 0])
         self.list_code1 = [code for i, code in enumerate(self.list_code) if i % 4 == 0]
         self.list_code2 = [code for i, code in enumerate(self.list_code) if i % 4 == 1]
         self.list_code3 = [code for i, code in enumerate(self.list_code) if i % 4 == 2]
         self.list_code4 = [code for i, code in enumerate(self.list_code) if i % 4 == 3]
         k = 0
         for i in range(0, len(self.list_code), 100):
-            rreg = [sn_jchj + k, ';'.join(self.list_code[i:i + 100]), '10;12;14;30;228;41;61;71;81', 1]
-            self.SetRealReg(rreg)
-            text = f"실시간 알림 등록 완료 - [{sn_jchj + k}] 종목갯수 {len(rreg[1].split(';'))}"
-            self.windowQ.put([1, text])
+            rreg = [scrNo['실시간종목'] + k, ';'.join(self.list_code[i:i + 100]), '10;12;14;30;228;41;61;71;81', 1]
+            self.set_real_reg(rreg)
+            text = f"실시간 알림 등록 완료 - [{scrNo['실시간종목'] + k}] 종목갯수 {len(rreg[1].split(';'))}"
+            self.windowQ.put(['LOG', text])
             k += 1
         self.windowQ.put(['LOG', '시스템 명령 실행 알림 - 리시버 장운영시간 및 실시간주식체결 등록 완료'])
         self.windowQ.put(['LOG', '시스템 명령 실행 알림 - 리시버 시작 완료'])
-
-
-
 
     def get_code_list_by_market(self, market):
         data = self.ocx.dynamicCall('GetCodeListByMarket(QString)', market)
@@ -296,9 +280,42 @@ class Worker:
     def _receive_chejan_data(self):
         pass
 
-    def update_tick_data(self, code, name, c, o, h, low, per, dm, ch, bids, asks, dt, now):
+    def update_tick_data(self, code, name, c, o, h, low, per, dm, ch, bids, asks, dt, receivetime):
         # print('udata_tick_data', code, name, c, o, h, low, per, dm, ch, bids, asks, dt, now)
-        pass
+        dt_ = dt[:13]
+        if code not in self.dict_cdjm.keys():
+            columns = ['10초누적거래대금', '10초전당일거래대금']
+            self.dict_cdjm[code] = pd.DataFrame([[0, dm]], columns=columns, index=[dt_])
+        elif dt_ != self.dict_cdjm[code].index[-1]:
+            predm = self.dict_cdjm[code]['10초전당일거래대금'][-1]
+            self.dict_cdjm[code].at[dt_] = dm - predm, dm
+            if len(self.dict_cdjm[code]) == MONEYTOP_MINUTE * 6:  # 이것이 갯수를 의미하는가 아니면 시간인가?
+                if per > 0:  # per가 0보다 크다는 건 상승했다는 의미. 어디에 쓰려고?
+                    self.df_mc.at[code] = self.dict_cdjm[code]['10초누적거래대금'].sum()
+                elif code in self.df_mc.index:
+                    self.df_mc.drop(index=code, inplace=True)
+                self.dict_cdjm[code].drop(index=self.dict_cdjm[code].index[0], inplace=True)
+
+        vitime = self.dict_vipr[code][1]
+        vid5price = self.dict_vipr[code][4]
+        data = [c, o, h, low, per, dm, ch, bids, asks, vitime, vid5price]
+        data += self.dict_hoga[code] + [code, dt, receivetime]
+
+        if code in self.list_gsjm2:
+            injango = code in self.list_jang
+            self.stgQ.put(data + [name, injango])
+            if injango:
+                self.traderQ.put([code, name, c, o, h, low])
+
+        data[9] = strf_time('%Y%m%d%H%M%S', vitime)
+        if code in self.list_code1:
+            self.tick1Q.put(data)
+        elif code in self.list_code2:
+            self.tick2Q.put(data)
+        elif code in self.list_code3:
+            self.tick3Q.put(data)
+        elif code in self.list_code4:
+            self.tick4Q.put(data)
 
     #-------------------------------------------------------------------------------------------------------------------
     # OpenAPI+ 메서드
@@ -312,3 +329,19 @@ class Worker:
         ret = self.ocx.dynamicCall("SetRealReg(QString, QString, QString, QString)", rreg)
         return ret
 
+    def block_request(self, *args, **kwargs):
+        trcode = args[0].lower()
+        lines = read_enc(trcode)
+        self.dict_item = parse_dat(trcode, lines)
+        self.str_tname = kwargs['output']
+        nnext = kwargs['next']
+        for i in kwargs:
+            if i.lower() != 'output' and i.lower() != 'next':
+                self.ocx.dynamicCall('SetInputValue(QString, QString)', i, kwargs[i])
+        self.dict_bool['TR수신'] = False
+        self.dict_bool['TR다음'] = False
+        self.ocx.dynamicCall('CommRqData(QString, QString, int, QString)', self.str_tname, trcode, nnext, scrNo['TR조회'])
+        sleeptime = timedelta_sec(0.25)
+        while not self.dict_bool['TR수신'] or now() < sleeptime:
+            pythoncom.PumpWaitingMessages()
+        return self.df_tr
