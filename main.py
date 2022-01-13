@@ -1,4 +1,3 @@
-import sqlite3
 import sys
 import os
 import logging
@@ -75,9 +74,6 @@ class Window(QtWidgets.QMainWindow, form_class):
         if msg[0] == 'LOG':
             now = datetime.datetime.now()
             self.textEdit.append(f'{str(now)} : {msg[1]}')
-
-        # else:
-        #     self.textEdit.append(msg[1])
 
     def update_gwansimjongmok(self, data):  # data = ('initial', "", "")
 
